@@ -46,9 +46,10 @@ module.exports = async function handler(req, res) {
           throw new Error(`Invalid item ID type: ${typeof item.id}`);
         }
 
-        const { rows } = await client.execute(
-          `SELECT inventory_count FROM products WHERE id = ${item.id}`
-        );
+        const { rows } = await client.execute({
+          sql: 'SELECT inventory_count FROM products WHERE id = ?',
+          args: [item.id],
+        });
         
         if (!rows[0] || rows[0].inventory_count < item.quantity) {
           throw new Error(`Insufficient inventory for product ${item.id}`);
@@ -76,49 +77,56 @@ module.exports = async function handler(req, res) {
           paymentIntentId: paymentIntent.id
         });
 
-        const orderQuery = `
-          INSERT INTO orders 
-            (status, total_amount, shipping_address, payment_intent_id, user_id) 
-            VALUES (
-              'completed', 
-              ${amount}, 
-              '${JSON.stringify(shipping)}', 
-              '${paymentIntent.id}',
-              ${shipping.userId || 'NULL'}
-            ) RETURNING id
-        `;
-        
-        const { rows: [order] } = await client.execute(orderQuery);
+        const { rows: [order] } = await client.execute({
+          sql: `
+            INSERT INTO orders
+              (status, total_amount, shipping_address, payment_intent_id, user_id)
+              VALUES ('completed', ?, ?, ?, ?) RETURNING id
+          `,
+          args: [
+            amount,
+            JSON.stringify(shipping),
+            paymentIntent.id,
+            shipping.userId || null,
+          ],
+        });
         console.log('Order created with ID:', order.id);
 
         // Process all items in sequence
         for (const item of items) {
           console.log(`Processing item ${item.id} for order ${order.id}...`);
           
-          const { rows: [product] } = await client.execute(
-            `SELECT * FROM products WHERE id = ${Number(item.id)}`
-          );
+          const { rows: [product] } = await client.execute({
+            sql: 'SELECT * FROM products WHERE id = ?',
+            args: [Number(item.id)],
+          });
 
           if (!product) {
             throw new Error(`Product ${item.id} not found`);
           }
 
-          await client.execute(`
-            INSERT INTO order_items 
-              (order_id, product_id, quantity, price_at_time)
-              VALUES (
-                ${Number(order.id)},
-                ${Number(item.id)},
-                ${Number(item.quantity)},
-                ${Number(product.price)}
-              )
-          `);
+          await client.execute({
+            sql: `
+              INSERT INTO order_items
+                (order_id, product_id, quantity, price_at_time)
+                VALUES (?, ?, ?, ?)
+            `,
+            args: [
+              Number(order.id),
+              Number(item.id),
+              Number(item.quantity),
+              Number(product.price),
+            ],
+          });
 
-          await client.execute(`
-            UPDATE products 
-            SET inventory_count = inventory_count - ${Number(item.quantity)}
-            WHERE id = ${Number(item.id)}
-          `);
+          await client.execute({
+            sql: `
+              UPDATE products
+              SET inventory_count = inventory_count - ?
+              WHERE id = ?
+            `,
+            args: [Number(item.quantity), Number(item.id)],
+          });
           
           console.log(`Completed processing item ${item.id}`);
         }

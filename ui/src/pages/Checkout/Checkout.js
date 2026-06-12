@@ -99,6 +99,13 @@ const CardContainer = styled.div`
   border-radius: 4px;
 `;
 
+const TestModeNote = styled.p`
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+`;
+
 const Button = styled.button`
   width: 100%;
   padding: 15px;
@@ -430,6 +437,11 @@ const PaymentForm = () => {
               }}
             />
           </CardContainer>
+          <TestModeNote>
+            This is a demo store. Payments run in Stripe test mode, so real
+            cards are declined. Use card number 4242 4242 4242 4242 with any
+            future expiry and any CVC to complete checkout.
+          </TestModeNote>
         </Section>
 
         {error && <ErrorMessage>{error}</ErrorMessage>}
